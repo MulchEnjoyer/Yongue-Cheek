@@ -18,7 +18,17 @@ export interface AnalysisResult {
   };
 }
 
+export interface CalibrationStatus {
+  type: 'calibrating' | 'calibrated';
+  message: string;
+  noiseFloor?: {
+    rms: number;
+    intensity: number;
+  };
+}
+
 type AnalysisCallback = (result: AnalysisResult) => void;
+type CalibrationCallback = (status: CalibrationStatus) => void;
 
 export class AudioService {
   private audioContext: AudioContext | null = null;
@@ -27,6 +37,7 @@ export class AudioService {
   private socket: WebSocket | null = null;
   private isRunning = false;
   private callback: AnalysisCallback | null = null;
+  private calibrationCallback: CalibrationCallback | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 3;
   private backendUrl: string;
@@ -38,8 +49,12 @@ export class AudioService {
     this.backendUrl = backendUrl;
   }
 
-  async start(onAnalysis: AnalysisCallback): Promise<boolean> {
+  async start(
+    onAnalysis: AnalysisCallback,
+    onCalibration?: CalibrationCallback
+  ): Promise<boolean> {
     this.callback = onAnalysis;
+    this.calibrationCallback = onCalibration || null;
     
     try {
       // Connect WebSocket first
@@ -198,6 +213,13 @@ export class AudioService {
     }
     
     this.callback = null;
+    this.calibrationCallback = null;
+  }
+  
+  recalibrate(): void {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({ type: 'recalibrate' }));
+    }
   }
 
   private async connectWebSocket(): Promise<void> {
@@ -221,7 +243,18 @@ export class AudioService {
         
         this.socket.onmessage = (event) => {
           try {
-            const result = JSON.parse(event.data) as AnalysisResult;
+            const data = JSON.parse(event.data);
+            
+            // Handle calibration messages
+            if (data.type === 'calibrating' || data.type === 'calibrated') {
+              if (this.calibrationCallback) {
+                this.calibrationCallback(data as CalibrationStatus);
+              }
+              return;
+            }
+            
+            // Handle analysis results
+            const result = data as AnalysisResult;
             if (this.callback && result.f1 !== undefined) {
               this.callback(result);
             }

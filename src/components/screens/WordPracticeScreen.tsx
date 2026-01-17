@@ -2,8 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Word } from '../../types';
 import { TongueVisualization } from '../TongueVisualization';
 import { AccuracyMeter } from '../AccuracyMeter';
+import { ListenButton } from '../ListenButton';
+import { ConfettiEffect } from '../ConfettiEffect';
 import { AudioService, AnalysisResult } from '../../lib/AudioService';
 import { DetectedVowel, VowelPosition, IPA_VOWELS } from '../../lib/VowelMapper';
+import { playSuccessSound } from '../../lib/SoundUtils';
 
 interface WordPracticeScreenProps {
   word: Word;
@@ -37,12 +40,23 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
   const audioServiceRef = useRef<AudioService | null>(null);
   const passingTimeRef = useRef<number | null>(null);
   const smoothedAccuracyRef = useRef(0);
+  const hasPlayedSoundRef = useRef(false);
 
   // Calculate blended target position from all sounds in the word
   const targetPosition = React.useMemo((): VowelPosition | null => {
+    if (!word || !word.sounds) return null;
+    
     // Find the primary vowel sound (final) for visualization
     const finalSound = word.sounds.find(s => s.type === 'final');
-    if (!finalSound?.targetPosition) return null;
+    if (!finalSound?.targetPosition) {
+      // Fallback: try to use any sound with a target position
+      const anySound = word.sounds.find(s => s.targetPosition);
+      if (!anySound?.targetPosition) return null;
+      
+      const f1 = 850 - anySound.targetPosition.tongueHeight * 600;
+      const f2 = 800 + anySound.targetPosition.tongueFrontness * 1600;
+      return { x: 1 - (f2 - 800) / 1600, y: (f1 - 250) / 600, f1, f2 };
+    }
     
     // Map articulatory position to F1/F2 space
     const f1 = 850 - finalSound.targetPosition.tongueHeight * 600;
@@ -54,10 +68,13 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
       f1,
       f2,
     };
-  }, [word.sounds]);
+  }, [word]);
 
   // Get positions by sound type for accuracy breakdown
   const soundsByType = React.useMemo(() => {
+    if (!word || !word.sounds) {
+      return { hasInitial: false, hasFinal: false, hasTone: false };
+    }
     const initial = word.sounds.filter(s => s.type === 'initial');
     const final = word.sounds.filter(s => s.type === 'final');
     const tone = word.sounds.filter(s => s.type === 'tone');
@@ -66,7 +83,7 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
       hasFinal: final.length > 0,
       hasTone: tone.length > 0,
     };
-  }, [word.sounds]);
+  }, [word]);
 
   // Calculate accuracy based on formant distance
   // More lenient scoring - formants naturally vary ~150-300Hz between speakers
@@ -87,6 +104,10 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
   }, [targetPosition]);
 
   const handleAudioResult = useCallback((result: AnalysisResult) => {
+    // Update audio intensity for visualization
+    const normalizedIntensity = Math.min(100, Math.max(0, (result.intensity + 40) * 2));
+    setAudioIntensity(normalizedIntensity);
+    
     if (!result.isVoiced) {
       setDetected(prev => ({ ...prev, isVoiced: false }));
       return;
@@ -125,14 +146,24 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
       setToneAccuracy(Math.round(smoothedAccuracyRef.current * 0.9 + Math.random() * 10));
     }
 
-    // Check passing threshold (50%) for 0.3 seconds
+    // Check passing threshold (50%) for 100ms
+    // Once passed, keep canContinue true (don't reset if accuracy drops)
     if (smoothedAccuracyRef.current >= 50) {
       if (passingTimeRef.current === null) {
         passingTimeRef.current = Date.now();
-      } else if (Date.now() - passingTimeRef.current >= 300) {
-        setCanContinue(true);
+      } else if (Date.now() - passingTimeRef.current >= 100) {
+        setCanContinue(prev => {
+          if (!prev && !hasPlayedSoundRef.current) {
+            hasPlayedSoundRef.current = true;
+            setTimeout(() => {
+              playSuccessSound();
+            }, 0);
+          }
+          return true;
+        });
       }
     } else {
+      // Reset timing but DON'T reset canContinue - once passed, stay passed
       passingTimeRef.current = null;
     }
   }, [calculateAccuracy, soundsByType]);
@@ -154,7 +185,7 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
     setIsListening(false);
   };
 
-  const handleTryAgain = () => {
+  const handleTryAgain = useCallback(() => {
     stopListening();
     setOverallAccuracy(0);
     setToneAccuracy(0);
@@ -163,7 +194,8 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
     setCanContinue(false);
     passingTimeRef.current = null;
     smoothedAccuracyRef.current = 0;
-  };
+    hasPlayedSoundRef.current = false;
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -175,21 +207,34 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
   useEffect(() => {
     handleTryAgain();
     setAttempts(0);
+    hasPlayedSoundRef.current = false;
     setDetected({
       position: { x: 0.5, y: 0.5, f1: 0, f2: 0 },
       nearestVowel: null,
       confidence: 0,
       isVoiced: false,
     });
-  }, [word.id]);
+  }, [word.id, handleTryAgain]);
 
   const handleContinue = () => {
     stopListening();
     onComplete(overallAccuracy);
   };
 
+  // Guard against missing word data
+  if (!word || !word.sounds) {
+    console.error('WordPracticeScreen: Invalid word data');
+    return (
+      <div className="screen word-practice-screen">
+        <div className="error-message">Error loading word data</div>
+        <button className="btn btn--primary" onClick={onBack}>Go Back</button>
+      </div>
+    );
+  }
+
   return (
     <div className="screen word-practice-screen">
+      <ConfettiEffect trigger={canContinue} duration={2000} />
       <div className="word-practice-screen__progress">
         <div className="progress-header">
           <button className="btn btn--ghost back-btn" onClick={onBack}>
@@ -211,7 +256,10 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
       <div className="word-practice-screen__content">
         <div className="word-practice-screen__left">
           <div className="word-display-card">
-            <div className="word-display-card__chinese">{word.characters}</div>
+            <div className="word-display-card__header">
+              <div className="word-display-card__chinese">{word.characters}</div>
+              <ListenButton text={word.characters} type="word" size="large" />
+            </div>
             <div className="word-display-card__pinyin">{word.pinyin}</div>
             <div className="word-display-card__meaning">{word.meaning}</div>
           </div>
@@ -260,7 +308,7 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
               </button>
             ) : (
               <button className="btn btn--secondary btn--large listening" onClick={stopListening}>
-                <span className="pulse-dot" />
+                <AudioLevelVisualization intensity={audioIntensity} isActive={isListening} />
                 <span>Listening...</span>
               </button>
             )}

@@ -48,6 +48,7 @@ IPA_VOWELS = {
 class AudioAnalyzer:
     """
     Real-time audio analyzer using Parselmouth with smoothing.
+    Includes adaptive noise floor estimation for noisy environments.
     """
     
     def __init__(self, sample_rate: int = 16000):
@@ -61,7 +62,20 @@ class AudioAnalyzer:
         
         self.pitch_floor = 75
         self.pitch_ceiling = 500
-        self.intensity_threshold = 45  # Lower threshold for quicker detection
+        
+        # Adaptive noise handling - will be calibrated
+        self.noise_floor_rms = 0.01  # Initial estimate, will be calibrated
+        self.noise_floor_intensity = 30  # Initial estimate, will be calibrated
+        self.is_calibrated = False
+        self.calibration_samples = []
+        self.calibration_duration = 1.0  # 1 second of calibration
+        self.calibration_samples_needed = int(sample_rate * self.calibration_duration)
+        
+        # Thresholds relative to noise floor (adaptive)
+        self.rms_threshold_multiplier = 2.5  # Must be 2.5x above noise floor
+        self.intensity_threshold_offset = 10  # Must be 10dB above noise floor
+        self.min_rms_threshold = 0.03  # Absolute minimum even in quiet rooms
+        self.min_intensity_threshold = 40  # Absolute minimum
         
         # Smoothing for stable output
         self.smoothing = 0.3  # 0 = no smoothing, 1 = full smoothing
@@ -70,6 +84,50 @@ class AudioAnalyzer:
         self._last_f3 = 0
         self._last_pitch = 0
         
+    def calibrate_noise_floor(self, audio_data: np.ndarray) -> bool:
+        """
+        Calibrate noise floor from ambient audio (should be called when user is silent).
+        Returns True when calibration is complete.
+        """
+        if len(audio_data) < 256:
+            return False
+        
+        if audio_data.dtype != np.float64:
+            audio_data = audio_data.astype(np.float64)
+        
+        # Calculate RMS for this sample
+        rms = np.sqrt(np.mean(audio_data ** 2))
+        
+        # Store calibration samples
+        self.calibration_samples.append(rms)
+        
+        # Keep only recent samples (last 1 second)
+        max_samples = int(self.sample_rate * self.calibration_duration / 512)  # Assuming ~512 sample chunks
+        if len(self.calibration_samples) > max_samples:
+            self.calibration_samples = self.calibration_samples[-max_samples:]
+        
+        # Need at least 0.5 seconds of data to calibrate
+        if len(self.calibration_samples) >= max_samples // 2:
+            # Use 90th percentile to avoid outliers (like brief sounds)
+            sorted_samples = sorted(self.calibration_samples)
+            percentile_idx = int(len(sorted_samples) * 0.9)
+            self.noise_floor_rms = sorted_samples[percentile_idx]
+            
+            # Also estimate intensity from a sample
+            try:
+                sound = parselmouth.Sound(audio_data, sampling_frequency=self.sample_rate)
+                intensity = self._get_intensity(sound)
+                # Use a conservative estimate (lower than measured)
+                self.noise_floor_intensity = max(20, intensity - 5)
+            except:
+                pass
+            
+            self.is_calibrated = True
+            logger.info(f"Noise floor calibrated: RMS={self.noise_floor_rms:.4f}, Intensity={self.noise_floor_intensity:.1f}dB")
+            return True
+        
+        return False
+    
     def analyze(self, audio_data: np.ndarray) -> AnalysisResult:
         """Analyze audio with smoothing for real-time display."""
         try:
@@ -79,15 +137,42 @@ class AudioAnalyzer:
             if audio_data.dtype != np.float64:
                 audio_data = audio_data.astype(np.float64)
             
-            # Quick energy check first (fast) - THRESHOLD to ignore silence
+            # Apply simple high-pass filter to reduce low-frequency noise (below 80Hz)
+            # This helps in noisy environments by filtering out rumble, HVAC, etc.
+            audio_data = self._high_pass_filter(audio_data, cutoff=80.0)
+            
+            # Quick energy check first (fast)
             rms = np.sqrt(np.mean(audio_data ** 2))
-            if rms < 0.025:  # Silence threshold - ignore quiet input
+            
+            # Adaptive threshold based on noise floor
+            if self.is_calibrated:
+                rms_threshold = max(
+                    self.min_rms_threshold,
+                    self.noise_floor_rms * self.rms_threshold_multiplier
+                )
+            else:
+                # Use conservative threshold before calibration
+                rms_threshold = 0.04
+            
+            if rms < rms_threshold:
                 return self._silent_result()
             
             sound = parselmouth.Sound(audio_data, sampling_frequency=self.sample_rate)
             
             intensity = self._get_intensity(sound)
-            is_voiced = intensity > self.intensity_threshold and rms > 0.03
+            
+            # Adaptive intensity threshold
+            if self.is_calibrated:
+                intensity_threshold = max(
+                    self.min_intensity_threshold,
+                    self.noise_floor_intensity + self.intensity_threshold_offset
+                )
+            else:
+                intensity_threshold = 45
+            
+            # Also check RMS is significantly above noise floor
+            rms_above_noise = rms > rms_threshold
+            is_voiced = intensity > intensity_threshold and rms_above_noise
             
             if not is_voiced:
                 # Decay smoothly to zero
@@ -175,6 +260,28 @@ class AudioAnalyzer:
         except:
             return 0
     
+    def _high_pass_filter(self, audio_data: np.ndarray, cutoff: float = 80.0) -> np.ndarray:
+        """
+        Simple high-pass filter using a first-order IIR filter.
+        Removes low-frequency noise (rumble, HVAC, etc.) that can interfere with speech analysis.
+        """
+        if len(audio_data) < 2:
+            return audio_data
+        
+        # Calculate filter coefficient for first-order high-pass
+        # Using a simple RC high-pass filter approximation
+        dt = 1.0 / self.sample_rate
+        rc = 1.0 / (2.0 * np.pi * cutoff)
+        alpha = rc / (rc + dt)
+        
+        # Apply filter (simple one-pole high-pass)
+        filtered = np.zeros_like(audio_data)
+        filtered[0] = audio_data[0]
+        for i in range(1, len(audio_data)):
+            filtered[i] = alpha * (filtered[i-1] + audio_data[i] - audio_data[i-1])
+        
+        return filtered
+    
     def _detect_vowel(self, f1: float, f2: float) -> tuple[Optional[str], float]:
         """Detect nearest IPA vowel."""
         if f1 == 0 or f2 == 0:
@@ -196,11 +303,15 @@ class AudioAnalyzer:
         return nearest, confidence
     
     def reset(self):
-        """Reset smoothing state."""
+        """Reset smoothing state and calibration."""
         self._last_f1 = 0
         self._last_f2 = 0
         self._last_f3 = 0
         self._last_pitch = 0
+        self.is_calibrated = False
+        self.calibration_samples = []
+        self.noise_floor_rms = 0.01
+        self.noise_floor_intensity = 30
 
 
 _analyzer = None

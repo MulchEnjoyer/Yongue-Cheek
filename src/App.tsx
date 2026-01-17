@@ -25,30 +25,25 @@ function App() {
   
   const level = allLevels[currentLevelIndex];
 
-  // Calculate total sounds across all words
-  const allSounds = level.words.flatMap((word, wordIdx) =>
-    word.sounds.map((sound, soundIdx) => ({
-      word,
-      sound,
-      globalIndex: level.words.slice(0, wordIdx).reduce((sum, w) => sum + w.sounds.length, 0) + soundIdx,
-    }))
+  // Calculate total sounds across all words (excluding tones - they're practiced with the full word)
+  const allSounds = level.words.flatMap((word) =>
+    word.sounds
+      .filter(sound => sound.type !== 'tone') // Skip tone steps
+      .map((sound) => ({ word, sound }))
   );
   const totalSounds = allSounds.length;
 
-  // Get current sound info
+  // Track current sound using a simple flat index
+  const [currentSoundIdx, setCurrentSoundIdx] = useState(0);
+
+  // Get current sound info from flat array
   const getCurrentSoundInfo = useCallback(() => {
-    let soundCount = 0;
-    for (let wordIdx = 0; wordIdx < level.words.length; wordIdx++) {
-      const word = level.words[wordIdx];
-      for (let soundIdx = 0; soundIdx < word.sounds.length; soundIdx++) {
-        if (wordIdx === progress.currentWordIndex && soundIdx === progress.currentSoundIndex) {
-          return { word, sound: word.sounds[soundIdx], globalIndex: soundCount };
-        }
-        soundCount++;
-      }
-    }
-    return null;
-  }, [level.words, progress.currentWordIndex, progress.currentSoundIndex]);
+    if (currentSoundIdx >= allSounds.length) return null;
+    return { 
+      ...allSounds[currentSoundIdx], 
+      globalIndex: currentSoundIdx 
+    };
+  }, [allSounds, currentSoundIdx]);
 
   const handleStartLearning = () => {
     setProgress(prev => ({ ...prev, currentStep: 'breakdown' }));
@@ -60,6 +55,7 @@ function App() {
 
   const handleBackToHome = () => {
     setProgress(initialProgress);
+    setCurrentSoundIdx(0);
   };
 
   const handleStartPractice = () => {
@@ -69,6 +65,7 @@ function App() {
   const handleSelectLevel = (index: number) => {
     setCurrentLevelIndex(index);
     setProgress(initialProgress);
+    setCurrentSoundIdx(0);
   };
 
   const handleSoundComplete = (accuracy: number) => {
@@ -80,34 +77,24 @@ function App() {
       [soundInfo.sound.id]: accuracy,
     };
 
-    // Move to next sound or next step
-    const currentWord = level.words[progress.currentWordIndex];
-    const isLastSoundInWord = progress.currentSoundIndex >= currentWord.sounds.length - 1;
-    const isLastWord = progress.currentWordIndex >= level.words.length - 1;
+    // Check if this is the last sound
+    const isLastSound = currentSoundIdx >= totalSounds - 1;
 
-    if (isLastSoundInWord && isLastWord) {
+    if (isLastSound) {
       // All sounds done, move to word practice
+      setCurrentSoundIdx(0);
       setProgress(prev => ({
         ...prev,
         soundAccuracies: newAccuracies,
         currentStep: 'word-practice',
         currentWordIndex: 0,
-        currentSoundIndex: 0,
-      }));
-    } else if (isLastSoundInWord) {
-      // Move to next word's first sound
-      setProgress(prev => ({
-        ...prev,
-        soundAccuracies: newAccuracies,
-        currentWordIndex: prev.currentWordIndex + 1,
-        currentSoundIndex: 0,
       }));
     } else {
-      // Move to next sound in current word
+      // Move to next sound
+      setCurrentSoundIdx(prev => prev + 1);
       setProgress(prev => ({
         ...prev,
         soundAccuracies: newAccuracies,
-        currentSoundIndex: prev.currentSoundIndex + 1,
       }));
     }
   };
@@ -155,12 +142,14 @@ function App() {
 
   const handleRestart = () => {
     setProgress(initialProgress);
+    setCurrentSoundIdx(0);
   };
 
   const handleNextLevel = () => {
     if (currentLevelIndex < allLevels.length - 1) {
       setCurrentLevelIndex(currentLevelIndex + 1);
       setProgress(initialProgress);
+      setCurrentSoundIdx(0);
     }
   };
 
@@ -207,16 +196,22 @@ function App() {
         );
       }
       
-      case 'word-practice':
+      case 'word-practice': {
+        const currentWord = level.words[progress.currentWordIndex];
+        if (!currentWord) {
+          console.error('Word not found at index:', progress.currentWordIndex);
+          return null;
+        }
         return (
           <WordPracticeScreen
-            word={level.words[progress.currentWordIndex]}
+            word={currentWord}
             wordIndex={progress.currentWordIndex}
             totalWords={level.words.length}
             onComplete={handleWordComplete}
             onBack={handleBackToHome}
           />
         );
+      }
       
       case 'phrase-practice':
         return (

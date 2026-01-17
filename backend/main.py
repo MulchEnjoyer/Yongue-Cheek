@@ -57,6 +57,7 @@ async def websocket_audio(websocket: WebSocket):
     """
     Low-latency WebSocket for real-time audio analysis.
     Processes audio continuously as it arrives.
+    Includes automatic noise floor calibration for noisy environments.
     """
     await websocket.accept()
     logger.info("WebSocket connected (low-latency mode)")
@@ -67,6 +68,10 @@ async def websocket_audio(websocket: WebSocket):
     # Rolling buffer for continuous analysis
     audio_buffer = np.array([], dtype=np.float64)
     samples_since_last_process = 0
+    
+    # Calibration state
+    calibrating = True
+    calibration_started = False
     
     try:
         while True:
@@ -86,8 +91,32 @@ async def websocket_audio(websocket: WebSocket):
                 if len(audio_buffer) > max_buffer:
                     audio_buffer = audio_buffer[-max_buffer:]
                 
-                # Process frequently for responsiveness
-                if samples_since_last_process >= PROCESS_EVERY and len(audio_buffer) >= MIN_CHUNK_SIZE:
+                # Calibration phase: measure ambient noise for first ~1 second
+                if calibrating:
+                    if not calibration_started:
+                        calibration_started = True
+                        await websocket.send_json({
+                            "type": "calibrating",
+                            "message": "Calibrating to ambient noise... Please stay quiet."
+                        })
+                    
+                    # Use audio for calibration
+                    if len(audio_float) >= 256:
+                        is_calibrated = analyzer.calibrate_noise_floor(audio_float)
+                        if is_calibrated:
+                            calibrating = False
+                            await websocket.send_json({
+                                "type": "calibrated",
+                                "noiseFloor": {
+                                    "rms": round(analyzer.noise_floor_rms, 4),
+                                    "intensity": round(analyzer.noise_floor_intensity, 1)
+                                },
+                                "message": "Calibration complete. Ready for speech analysis."
+                            })
+                            logger.info("Noise floor calibration complete")
+                
+                # Process frequently for responsiveness (only after calibration or if not calibrating)
+                if not calibrating and samples_since_last_process >= PROCESS_EVERY and len(audio_buffer) >= MIN_CHUNK_SIZE:
                     samples_since_last_process = 0
                     
                     # Analyze the recent audio
@@ -103,7 +132,18 @@ async def websocket_audio(websocket: WebSocket):
                 elif msg.get("type") == "reset":
                     audio_buffer = np.array([], dtype=np.float64)
                     analyzer.reset()
+                    calibrating = True
+                    calibration_started = False
                     await websocket.send_json({"type": "reset_ack"})
+                elif msg.get("type") == "recalibrate":
+                    # Manual recalibration request
+                    analyzer.reset()
+                    calibrating = True
+                    calibration_started = False
+                    await websocket.send_json({
+                        "type": "calibrating",
+                        "message": "Recalibrating to ambient noise... Please stay quiet."
+                    })
                     
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")

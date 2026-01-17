@@ -37,7 +37,9 @@ export const BreakdownScreen: React.FC<BreakdownScreenProps> = ({ level, onConti
             </div>
             
             <div className="word-card__sounds">
-              {word.sounds.map((sound, soundIndex) => (
+              {word.sounds
+                .filter(sound => sound.type !== 'tone') // Skip tone display - practiced with full word
+                .map((sound, soundIndex) => (
                 <div 
                   key={sound.id} 
                   className="sound-chip"

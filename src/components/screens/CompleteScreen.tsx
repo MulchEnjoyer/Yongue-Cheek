@@ -47,11 +47,31 @@ export const CompleteScreen: React.FC<CompleteScreenProps> = ({
   return (
     <div className="screen complete-screen">
       <div className="complete-screen__celebration">
+        {/* Main confetti pieces */}
         <div className="confetti confetti--1" />
         <div className="confetti confetti--2" />
         <div className="confetti confetti--3" />
         <div className="confetti confetti--4" />
         <div className="confetti confetti--5" />
+        {/* Additional confetti for more celebration */}
+        {Array.from({ length: 15 }).map((_, i) => (
+          <div
+            key={`extra-${i}`}
+            className="confetti"
+            style={{
+              left: `${(i * 7) % 100}%`,
+              background: [
+                'var(--color-accent-primary)',
+                'var(--color-accent-gold)',
+                'var(--color-success)',
+                'var(--color-accent-secondary)',
+                'var(--color-warning)',
+              ][i % 5],
+              animationDelay: `${i * 0.2}s`,
+              animationDuration: `${3 + (i % 3)}s`,
+            }}
+          />
+        ))}
       </div>
 
       <div className="complete-screen__content">

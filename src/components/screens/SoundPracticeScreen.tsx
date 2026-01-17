@@ -4,8 +4,12 @@ import { TongueVisualization } from '../TongueVisualization';
 import { AccuracyMeter } from '../AccuracyMeter';
 import { ToneIndicator } from '../ToneIndicator';
 import { DifficultyBadge } from '../DifficultyBadge';
+import { AudioLevelVisualization } from '../AudioLevelVisualization';
+import { ListenButton } from '../ListenButton';
+import { ConfettiEffect } from '../ConfettiEffect';
 import { AudioService, AnalysisResult } from '../../lib/AudioService';
 import { VowelMapper, DetectedVowel, VowelPosition, IPA_VOWELS } from '../../lib/VowelMapper';
+import { playSuccessSound } from '../../lib/SoundUtils';
 
 interface SoundPracticeScreenProps {
   word: Word;
@@ -29,6 +33,7 @@ export const SoundPracticeScreen: React.FC<SoundPracticeScreenProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [accuracy, setAccuracy] = useState(0);
   const [canContinue, setCanContinue] = useState(false);
+  const [audioIntensity, setAudioIntensity] = useState(0);
   const [detected, setDetected] = useState<DetectedVowel>({
     position: { x: 0.5, y: 0.5, f1: 0, f2: 0 },
     nearestVowel: null,
@@ -40,6 +45,7 @@ export const SoundPracticeScreen: React.FC<SoundPracticeScreenProps> = ({
   const vowelMapperRef = useRef<VowelMapper>(new VowelMapper());
   const passingTimeRef = useRef<number | null>(null);
   const smoothedAccuracyRef = useRef(0);
+  const hasPlayedSoundRef = useRef(false);
 
   // Convert target position to vowel space coordinates
   const getTargetVowelPosition = useCallback((): VowelPosition | null => {
@@ -85,6 +91,10 @@ export const SoundPracticeScreen: React.FC<SoundPracticeScreenProps> = ({
   }, []);
 
   const handleAudioResult = useCallback((result: AnalysisResult) => {
+    // Update audio intensity for visualization
+    const normalizedIntensity = Math.min(100, Math.max(0, (result.intensity + 40) * 2)); // Normalize intensity
+    setAudioIntensity(normalizedIntensity);
+    
     if (!result.isVoiced) {
       // Keep showing last position but mark as not voiced
       setDetected(prev => ({ ...prev, isVoiced: false }));
@@ -115,16 +125,27 @@ export const SoundPracticeScreen: React.FC<SoundPracticeScreenProps> = ({
     smoothedAccuracyRef.current = smoothedAccuracyRef.current * 0.5 + newAccuracy * 0.5;
     setAccuracy(Math.round(smoothedAccuracyRef.current));
 
-    // Check if passing threshold (50%) for 0.3 seconds
-    if (smoothedAccuracyRef.current >= 50) {
-      if (passingTimeRef.current === null) {
-        passingTimeRef.current = Date.now();
-      } else if (Date.now() - passingTimeRef.current >= 300) {
-        setCanContinue(true);
+    // Check if passing threshold (50%) for 100ms
+      // Once passed, keep canContinue true (don't reset if accuracy drops)
+      if (smoothedAccuracyRef.current >= 50) {
+        if (passingTimeRef.current === null) {
+          passingTimeRef.current = Date.now();
+        } else if (Date.now() - passingTimeRef.current >= 100) {
+          // Only play sound and set canContinue when transitioning from false to true
+          setCanContinue(prev => {
+            if (!prev && !hasPlayedSoundRef.current) {
+              hasPlayedSoundRef.current = true;
+              setTimeout(() => {
+                playSuccessSound();
+              }, 0);
+            }
+            return true;
+          });
+        }
+      } else {
+        // Reset timing but DON'T reset canContinue - once passed, stay passed
+        passingTimeRef.current = null;
       }
-    } else {
-      passingTimeRef.current = null;
-    }
   }, [getTargetVowelPosition, calculateAccuracy]);
 
   const startListening = async () => {
@@ -155,6 +176,7 @@ export const SoundPracticeScreen: React.FC<SoundPracticeScreenProps> = ({
     setCanContinue(false);
     passingTimeRef.current = null;
     smoothedAccuracyRef.current = 0;
+    hasPlayedSoundRef.current = false;
     setDetected({
       position: { x: 0.5, y: 0.5, f1: 0, f2: 0 },
       nearestVowel: null,
@@ -191,6 +213,7 @@ export const SoundPracticeScreen: React.FC<SoundPracticeScreenProps> = ({
 
   return (
     <div className="screen sound-practice-screen">
+      <ConfettiEffect trigger={canContinue} duration={2000} />
       <div className="sound-practice-screen__progress">
         <div className="progress-header">
           <button className="btn btn--ghost back-btn" onClick={onBack}>
@@ -215,6 +238,7 @@ export const SoundPracticeScreen: React.FC<SoundPracticeScreenProps> = ({
             <div className="sound-info-card__word">
               <span className="sound-info-card__character">{word.characters}</span>
               <span className="sound-info-card__pinyin">{highlightedPinyin()}</span>
+              <ListenButton text={sound.pinyin} type="sound" size="medium" />
             </div>
 
             <div className="sound-info-card__details">
@@ -252,7 +276,7 @@ export const SoundPracticeScreen: React.FC<SoundPracticeScreenProps> = ({
               </button>
             ) : (
               <button className="btn btn--secondary btn--large listening" onClick={stopListening}>
-                <span className="pulse-dot" />
+                <AudioLevelVisualization intensity={audioIntensity} isActive={isListening} />
                 <span>Listening...</span>
               </button>
             )}

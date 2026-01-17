@@ -2,8 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Level } from '../../types';
 import { TongueVisualization } from '../TongueVisualization';
 import { AccuracyMeter } from '../AccuracyMeter';
+import { AudioLevelVisualization } from '../AudioLevelVisualization';
+import { ListenButton } from '../ListenButton';
+import { ConfettiEffect } from '../ConfettiEffect';
 import { AudioService, AnalysisResult } from '../../lib/AudioService';
 import { DetectedVowel, VowelPosition, IPA_VOWELS } from '../../lib/VowelMapper';
+import { playSuccessSound } from '../../lib/SoundUtils';
 
 interface PhrasePracticeScreenProps {
   level: Level;
@@ -19,6 +23,7 @@ export const PhrasePracticeScreen: React.FC<PhrasePracticeScreenProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [accuracy, setAccuracy] = useState(0);
   const [canContinue, setCanContinue] = useState(false);
+  const [audioIntensity, setAudioIntensity] = useState(0);
   const [attempts, setAttempts] = useState(0);
   const [detected, setDetected] = useState<DetectedVowel>({
     position: { x: 0.5, y: 0.5, f1: 0, f2: 0 },
@@ -30,6 +35,7 @@ export const PhrasePracticeScreen: React.FC<PhrasePracticeScreenProps> = ({
   const audioServiceRef = useRef<AudioService | null>(null);
   const passingTimeRef = useRef<number | null>(null);
   const smoothedAccuracyRef = useRef(0);
+  const hasPlayedSoundRef = useRef(false);
 
   // Calculate blended target position from all sounds in all words
   const targetPosition = React.useMemo((): VowelPosition | null => {
@@ -81,6 +87,10 @@ export const PhrasePracticeScreen: React.FC<PhrasePracticeScreenProps> = ({
   }, [targetPosition]);
 
   const handleAudioResult = useCallback((result: AnalysisResult) => {
+    // Update audio intensity for visualization
+    const normalizedIntensity = Math.min(100, Math.max(0, (result.intensity + 40) * 2));
+    setAudioIntensity(normalizedIntensity);
+    
     if (!result.isVoiced) {
       setDetected(prev => ({ ...prev, isVoiced: false }));
       return;
@@ -108,14 +118,24 @@ export const PhrasePracticeScreen: React.FC<PhrasePracticeScreenProps> = ({
     smoothedAccuracyRef.current = smoothedAccuracyRef.current * 0.5 + newAccuracy * 0.5;
     setAccuracy(Math.round(smoothedAccuracyRef.current));
 
-    // Check passing threshold (45% for phrases) for 0.3 seconds
+    // Check passing threshold (45% for phrases) for 100ms
+    // Once passed, keep canContinue true (don't reset if accuracy drops)
     if (smoothedAccuracyRef.current >= 45) {
       if (passingTimeRef.current === null) {
         passingTimeRef.current = Date.now();
-      } else if (Date.now() - passingTimeRef.current >= 300) {
-        setCanContinue(true);
+      } else if (Date.now() - passingTimeRef.current >= 100) {
+        setCanContinue(prev => {
+          if (!prev && !hasPlayedSoundRef.current) {
+            hasPlayedSoundRef.current = true;
+            setTimeout(() => {
+              playSuccessSound();
+            }, 0);
+          }
+          return true;
+        });
       }
     } else {
+      // Reset timing but DON'T reset canContinue - once passed, stay passed
       passingTimeRef.current = null;
     }
   }, [calculateAccuracy]);
@@ -143,6 +163,7 @@ export const PhrasePracticeScreen: React.FC<PhrasePracticeScreenProps> = ({
     setCanContinue(false);
     passingTimeRef.current = null;
     smoothedAccuracyRef.current = 0;
+    hasPlayedSoundRef.current = false;
   };
 
   useEffect(() => {
@@ -158,6 +179,7 @@ export const PhrasePracticeScreen: React.FC<PhrasePracticeScreenProps> = ({
 
   return (
     <div className="screen phrase-practice-screen">
+      <ConfettiEffect trigger={canContinue} duration={2000} />
       <div className="phrase-practice-screen__header">
         <button className="btn btn--ghost back-btn" onClick={onBack}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -174,7 +196,10 @@ export const PhrasePracticeScreen: React.FC<PhrasePracticeScreenProps> = ({
       <div className="phrase-practice-screen__content">
         <div className="phrase-practice-screen__left">
           <div className="phrase-display-card">
-            <div className="phrase-display-card__chinese">{level.phrase}</div>
+            <div className="phrase-display-card__header">
+              <div className="phrase-display-card__chinese">{level.phrase}</div>
+              <ListenButton text={level.phrase} type="phrase" size="large" />
+            </div>
             <div className="phrase-display-card__pinyin">{level.pinyin}</div>
             <div className="phrase-display-card__translation">"{level.translation}"</div>
           </div>
@@ -207,7 +232,7 @@ export const PhrasePracticeScreen: React.FC<PhrasePracticeScreenProps> = ({
               </button>
             ) : (
               <button className="btn btn--secondary btn--large listening" onClick={stopListening}>
-                <span className="pulse-dot" />
+                <AudioLevelVisualization intensity={audioIntensity} isActive={isListening} />
                 <span>Listening...</span>
               </button>
             )}
