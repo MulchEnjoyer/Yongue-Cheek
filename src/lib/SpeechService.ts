@@ -5,27 +5,52 @@
  */
 
 // Import audio files for zaijian level
-// Using Vite's ?url syntax to get the actual URL
-import zaijianAudioUrl from '../sounds/zaijian/zaijian.mp3?url';
-import zaiAudioUrl from '../sounds/zaijian/zai.mp3?url';
-import jianAudioUrl from '../sounds/zaijian/jian.mp3?url';
-import zAudioUrl from '../sounds/zaijian/z.mp3?url';
-import aiAudioUrl from '../sounds/zaijian/ai.mp3?url';
-import jAudioUrl from '../sounds/zaijian/j.mp3?url';
-import ianAudioUrl from '../sounds/zaijian/ian.mp3?url';
+import zaijianAudioUrl from '../sounds/zaijian/zaijian.mp3';
+import zaiAudioUrl from '../sounds/zaijian/zai.mp3';
+import jianAudioUrl from '../sounds/zaijian/jian.mp3';
+import zAudioUrl from '../sounds/zaijian/z.mp3';
+import aiAudioUrl from '../sounds/zaijian/ai.mp3';
+import jAudioUrl from '../sounds/zaijian/j.mp3';
+import ianAudioUrl from '../sounds/zaijian/ian.mp3';
+
+// Import audio files for xiexie level
+import xiexieAudioUrl from '../sounds/xiexie/xiexie.mp3';
+import xieAudioUrl from '../sounds/xiexie/xie.mp3';
+import xAudioUrl from '../sounds/xiexie/x.mp3';
+import ieAudioUrl from '../sounds/xiexie/ie.mp3';
+
+// Import audio files for nihao level
+import nihaoAudioUrl from '../sounds/nihao/nihao.mp3';
+import niAudioUrl from '../sounds/nihao/ni.mp3';
+import haoAudioUrl from '../sounds/nihao/hao.mp3';
+import nAudioUrl from '../sounds/nihao/n.mp3';
+import iAudioUrl from '../sounds/nihao/i.mp3';
+import hAudioUrl from '../sounds/nihao/h.mp3';
+import aoAudioUrl from '../sounds/nihao/ao.mp3';
 
 // Mapping from text/sound/word/phrase to audio files
 const audioFileMap: Record<string, string | null> = {
-  // Phrase
+  // Phrases
   '再见': zaijianAudioUrl,
+  '谢谢': xiexieAudioUrl,
+  '你好': nihaoAudioUrl,
   // Words
   '再': zaiAudioUrl,
   '见': jianAudioUrl,
+  '谢': xieAudioUrl,
+  '你': niAudioUrl,
+  '好': haoAudioUrl,
   // Sounds
   'z': zAudioUrl,
   'ai': aiAudioUrl,
   'j': jAudioUrl,
   'ian': ianAudioUrl,
+  'x': xAudioUrl,
+  'ie': ieAudioUrl,
+  'n': nAudioUrl,
+  'i': iAudioUrl,
+  'h': hAudioUrl,
+  'ao': aoAudioUrl,
 };
 
 export class SpeechService {

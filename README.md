@@ -59,6 +59,11 @@ App runs at `http://localhost:5173`
 └── public/
 ```
 
+## Credits
+
+- **Audio samples** — [MandaBanana](https://www.youtube.com/@MandaBanana) on YouTube
+- **Speech analysis** — [Parselmouth](https://github.com/YannickJadworski/Parselmouth) (Python interface to Praat)
+
 ## License
 
 MIT

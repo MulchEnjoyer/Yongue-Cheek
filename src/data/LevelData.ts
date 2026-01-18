@@ -364,85 +364,8 @@ export const level3: Level = {
   ],
 };
 
-// === LEVEL 4: 我叫 (My name is) ===
-export const level4: Level = {
-  id: 'level-4-wojiao',
-  phrase: '我叫',
-  pinyin: 'wǒ jiào',
-  translation: 'My name is...',
-  difficulty: 'intermediate',
-  words: [
-    {
-      id: 'word-wo',
-      characters: '我',
-      pinyin: 'wǒ',
-      meaning: 'I / me',
-      sounds: [
-        {
-          id: 'sound-w',
-          pinyin: 'w',
-          ipa: '/w/',
-          type: 'initial',
-          difficulty: 'easy',
-          targetPosition: positions.w,
-        },
-        {
-          id: 'sound-o',
-          pinyin: 'o',
-          ipa: '/o/',
-          type: 'final',
-          difficulty: 'medium',
-          targetPosition: positions.o,
-        },
-        {
-          id: 'sound-tone3-wo',
-          pinyin: '3rd tone',
-          ipa: '˧˩˧',
-          type: 'tone',
-          difficulty: 'medium',
-          targetPosition: positions.tone3,
-          toneNumber: 3,
-        },
-      ],
-    },
-    {
-      id: 'word-jiao',
-      characters: '叫',
-      pinyin: 'jiào',
-      meaning: 'to be called',
-      sounds: [
-        {
-          id: 'sound-j2',
-          pinyin: 'j',
-          ipa: '/tɕ/',
-          type: 'initial',
-          difficulty: 'hard',
-          targetPosition: positions.j,
-        },
-        {
-          id: 'sound-iao',
-          pinyin: 'iao',
-          ipa: '/iaʊ/',
-          type: 'final',
-          difficulty: 'medium',
-          targetPosition: positions.ao,
-        },
-        {
-          id: 'sound-tone4-jiao',
-          pinyin: '4th tone',
-          ipa: '˥˩',
-          type: 'tone',
-          difficulty: 'easy',
-          targetPosition: positions.tone4,
-          toneNumber: 4,
-        },
-      ],
-    },
-  ],
-};
-
 // Backwards compatibility
 export const demoLevel = level1;
 
 // All levels
-export const allLevels: Level[] = [level1, level2, level3, level4];
+export const allLevels: Level[] = [level1, level2, level3];
