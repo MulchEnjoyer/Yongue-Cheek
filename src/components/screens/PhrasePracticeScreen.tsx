@@ -243,6 +243,20 @@ export const PhrasePracticeScreen: React.FC<PhrasePracticeScreenProps> = ({
               </button>
             )}
 
+            {/* Debug button to force pass */}
+            <button 
+              className="btn btn--ghost" 
+              onClick={() => {
+                setCanContinue(true);
+                setAccuracy(100);
+                playSuccessSound();
+              }}
+              style={{ fontSize: '0.75rem', padding: '0.5rem', opacity: 0.6 }}
+              title="Debug: Force pass"
+            >
+              🐛 Force Pass
+            </button>
+
             {canContinue && (
               <button 
                 className="btn btn--success btn--large animate-in"

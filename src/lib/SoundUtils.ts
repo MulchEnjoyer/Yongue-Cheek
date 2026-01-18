@@ -2,41 +2,76 @@
  * Audio feedback utilities for user interactions
  */
 
+import passSoundUrl from '../pass.mp3';
+
+// Cache the audio element for better performance
+let audioCache: HTMLAudioElement | null = null;
+
 /**
- * Play a pleasant "ding" sound when pronunciation is correct
- * Uses Web Audio API to generate a clean tone
+ * Create confetti particles in the DOM
+ */
+function createConfettiParticles(): void {
+  // Check if confetti container already exists, if not create it
+  let container = document.querySelector('.confetti-effect-temp') as HTMLElement;
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'confetti-effect confetti-effect-temp';
+    document.body.appendChild(container);
+  }
+
+  // Clear any existing particles
+  container.innerHTML = '';
+
+  // Create confetti pieces
+  const colors = [
+    'var(--color-accent-primary)',
+    'var(--color-accent-gold)',
+    'var(--color-success)',
+    'var(--color-accent-secondary)',
+    'var(--color-warning)',
+  ];
+
+  for (let i = 0; i < 20; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = `${(i * 5) % 100}%`;
+    piece.style.background = colors[i % 5];
+    piece.style.animationDelay = `${i * 0.05}s`;
+    piece.style.animationDuration = `${1 + (i % 3) * 0.3}s`;
+    container.appendChild(piece);
+  }
+
+  // Remove container after animation completes
+  setTimeout(() => {
+    if (container && container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  }, 3000);
+}
+
+/**
+ * Play the pass.mp3 sound when pronunciation is correct
+ * Also triggers confetti effect
  */
 export function playSuccessSound(): void {
   try {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
+    // Create audio element if not cached
+    if (!audioCache) {
+      audioCache = new Audio(passSoundUrl);
+      audioCache.volume = 1.0;
+    }
     
-    // Connect nodes
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    // Configure a pleasant tone (musical note)
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5 note
-    oscillator.frequency.setValueAtTime(659.25, audioContext.currentTime + 0.1); // E5 note
-    oscillator.frequency.setValueAtTime(783.99, audioContext.currentTime + 0.2); // G5 note (chord)
-    
-    // Envelope for smooth attack and decay
-    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.05);
-    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
-    
-    // Play the sound
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
-    
-    // Clean up context after sound finishes
-    setTimeout(() => {
-      audioContext.close();
-    }, 500);
+    // Reset to start and play
+    audioCache.currentTime = 0;
+    audioCache.play().catch((error) => {
+      // Silently fail if audio can't play (e.g., user interaction required)
+      console.warn('Could not play success sound:', error);
+    });
+
+    // Trigger confetti effect
+    createConfettiParticles();
   } catch (error) {
-    // Silently fail if audio context isn't available
+    // Silently fail if audio isn't available
     console.warn('Could not play success sound:', error);
   }
 }

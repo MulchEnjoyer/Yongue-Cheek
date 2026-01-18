@@ -192,19 +192,104 @@ export const SoundPracticeScreen: React.FC<SoundPracticeScreenProps> = ({
 
   // Get pinyin with highlighted sound
   const highlightedPinyin = () => {
-    const pinyinLower = word.pinyin.toLowerCase();
-    const soundLower = sound.pinyin.toLowerCase();
-    const index = pinyinLower.indexOf(soundLower);
+    if (sound.type === 'tone') {
+      return <span>{word.pinyin}</span>;
+    }
+
+    // Helper to normalize pinyin by removing tone marks (āáǎà -> a, ēéěè -> e, etc.)
+    const removeToneMarks = (str: string): string => {
+      return str
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, ''); // Remove diacritics (tone marks)
+    };
     
-    if (index === -1 || sound.type === 'tone') {
+    // Find the local index of the current sound within word.sounds (excluding tones)
+    const nonToneSounds = word.sounds.filter(s => s.type !== 'tone');
+    const localSoundIndex = nonToneSounds.findIndex(s => s.id === sound.id);
+    
+    if (localSoundIndex === -1) {
+      return <span>{word.pinyin}</span>;
+    }
+    
+    // Simple approach: walk through pinyin sequentially, matching sounds in order
+    // Build up position by finding each sound one by one in the original pinyin string
+    let currentPos = 0;
+    const pinyinLower = word.pinyin.toLowerCase();
+    const soundNoTones = removeToneMarks(sound.pinyin);
+    
+    // First, find all previous sounds to get to the right position
+    for (let i = 0; i < localSoundIndex; i++) {
+      const prevSound = nonToneSounds[i];
+      const prevSoundLower = prevSound.pinyin.toLowerCase();
+      const prevSoundNoTones = removeToneMarks(prevSound.pinyin);
+      
+      // Try to find this sound starting from currentPos
+      // First try exact match (for simple cases like "n", "h")
+      let foundIndex = pinyinLower.indexOf(prevSoundLower, currentPos);
+      
+      // If not found, try without tone marks (for cases where sound has tone in pinyin)
+      if (foundIndex === -1 && prevSoundNoTones !== prevSoundLower) {
+        // Build a substring from currentPos and check for tone-removed version
+        for (let j = currentPos; j < word.pinyin.length; j++) {
+          const substring = word.pinyin.substring(j, j + prevSound.pinyin.length + 1);
+          const substringNoTones = removeToneMarks(substring);
+          if (substringNoTones.startsWith(prevSoundNoTones)) {
+            foundIndex = j;
+            break;
+          }
+        }
+      }
+      
+      if (foundIndex !== -1) {
+        currentPos = foundIndex + prevSound.pinyin.length;
+      }
+    }
+    
+    // Now find the current sound starting from currentPos
+    const soundLower = sound.pinyin.toLowerCase();
+    let targetIndex = pinyinLower.indexOf(soundLower, currentPos);
+    let actualLength = sound.pinyin.length;
+    
+    // If not found with exact match, try without tone marks
+    if (targetIndex === -1) {
+      // Check substring starting from currentPos
+      // Tone-marked vowels like "ǎo" are one char but match "ao" (two chars)
+      for (let i = currentPos; i < word.pinyin.length; i++) {
+        // Try different lengths starting from 1 up to sound length + 1
+        // Tone-marked vowels might be 1-2 chars shorter
+        for (let len = 1; len <= Math.min(sound.pinyin.length + 2, word.pinyin.length - i); len++) {
+          const substring = word.pinyin.substring(i, i + len);
+          const substringNoTones = removeToneMarks(substring);
+          // Check if the tone-removed substring matches our sound
+          if (substringNoTones === soundNoTones) {
+            targetIndex = i;
+            // Use the actual length we found (might be shorter if tone-marked vowel)
+            actualLength = len;
+            break;
+          }
+        }
+        if (targetIndex !== -1) break;
+      }
+    }
+    
+    if (targetIndex === -1) {
+      // Last resort fallback - try first occurrence
+      targetIndex = pinyinLower.indexOf(soundLower);
+      if (targetIndex !== -1) {
+        actualLength = sound.pinyin.length;
+      }
+    }
+    
+    if (targetIndex === -1) {
       return <span>{word.pinyin}</span>;
     }
 
     return (
       <>
-        {word.pinyin.slice(0, index)}
-        <span className="highlight">{word.pinyin.slice(index, index + sound.pinyin.length)}</span>
-        {word.pinyin.slice(index + sound.pinyin.length)}
+        {word.pinyin.slice(0, targetIndex)}
+        <span className="highlight">{word.pinyin.slice(targetIndex, targetIndex + actualLength)}</span>
+        {word.pinyin.slice(targetIndex + actualLength)}
       </>
     );
   };
@@ -283,6 +368,20 @@ export const SoundPracticeScreen: React.FC<SoundPracticeScreenProps> = ({
 
             <button className="btn btn--ghost" onClick={onSkip}>
               Skip this sound
+            </button>
+
+            {/* Debug button to force pass */}
+            <button 
+              className="btn btn--ghost" 
+              onClick={() => {
+                setCanContinue(true);
+                setAccuracy(100);
+                playSuccessSound();
+              }}
+              style={{ fontSize: '0.75rem', padding: '0.5rem', opacity: 0.6 }}
+              title="Debug: Force pass"
+            >
+              🐛 Force Pass
             </button>
 
             {canContinue && (

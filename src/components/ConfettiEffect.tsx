@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 
 interface ConfettiEffectProps {
   trigger: boolean;
@@ -7,21 +7,28 @@ interface ConfettiEffectProps {
 
 /**
  * Lightweight confetti effect that triggers when canContinue becomes true
+ * Now tracks transitions to ensure it triggers on every step/stage
  */
 export const ConfettiEffect: React.FC<ConfettiEffectProps> = ({ 
   trigger, 
   duration = 2000 
 }) => {
   const [isActive, setIsActive] = useState(false);
+  const prevTriggerRef = useRef<boolean | undefined>(undefined);
 
   useEffect(() => {
-    if (trigger) {
+    // Trigger confetti when transitioning from false to true
+    // Use undefined check to handle initial mount and resets properly
+    if (trigger && prevTriggerRef.current !== true) {
       setIsActive(true);
       const timer = setTimeout(() => {
         setIsActive(false);
       }, duration);
+      prevTriggerRef.current = trigger;
       return () => clearTimeout(timer);
     }
+    // Always update ref to track current state
+    prevTriggerRef.current = trigger;
   }, [trigger, duration]);
 
   if (!isActive) return null;

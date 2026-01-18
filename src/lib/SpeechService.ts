@@ -1,13 +1,39 @@
 /**
  * Speech Service - Text-to-Speech for Chinese pronunciation
  * Uses the Web Speech API for instant playback
+ * Falls back to audio files when available
  */
+
+// Import audio files for zaijian level
+// Using Vite's ?url syntax to get the actual URL
+import zaijianAudioUrl from '../sounds/zaijian/zaijian.mp3?url';
+import zaiAudioUrl from '../sounds/zaijian/zai.mp3?url';
+import jianAudioUrl from '../sounds/zaijian/jian.mp3?url';
+import zAudioUrl from '../sounds/zaijian/z.mp3?url';
+import aiAudioUrl from '../sounds/zaijian/ai.mp3?url';
+import jAudioUrl from '../sounds/zaijian/j.mp3?url';
+import ianAudioUrl from '../sounds/zaijian/ian.mp3?url';
+
+// Mapping from text/sound/word/phrase to audio files
+const audioFileMap: Record<string, string | null> = {
+  // Phrase
+  '再见': zaijianAudioUrl,
+  // Words
+  '再': zaiAudioUrl,
+  '见': jianAudioUrl,
+  // Sounds
+  'z': zAudioUrl,
+  'ai': aiAudioUrl,
+  'j': jAudioUrl,
+  'ian': ianAudioUrl,
+};
 
 export class SpeechService {
   private static instance: SpeechService;
   private synth: SpeechSynthesis;
   private chineseVoice: SpeechSynthesisVoice | null = null;
   private isReady: boolean = false;
+  private currentAudio: HTMLAudioElement | null = null;
 
   private constructor() {
     this.synth = window.speechSynthesis;
@@ -54,15 +80,62 @@ export class SpeechService {
   }
 
   /**
-   * Speak Chinese text
+   * Play audio file if available, otherwise fall back to TTS
    * @param text - The Chinese characters or pinyin to speak
-   * @param rate - Speech rate (0.1 to 2, default 0.8 for clarity)
+   * @param rate - Speech rate (0.1 to 2, default 0.8 for clarity) - only used for TTS fallback
    */
   public speak(text: string, rate: number = 0.8): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Cancel any ongoing speech
-      this.synth.cancel();
+      // Cancel any ongoing speech or audio
+      this.stop();
 
+      // Check if we have an audio file for this text
+      const audioUrl = audioFileMap[text] || audioFileMap[text.toLowerCase()];
+      
+      // Debug logging
+      console.log('SpeechService.speak:', { text, audioUrl, mapHasText: text in audioFileMap, mapHasLower: text.toLowerCase() in audioFileMap, mapKeys: Object.keys(audioFileMap) });
+      
+      if (audioUrl) {
+        // Play audio file
+        try {
+          this.currentAudio = new Audio(audioUrl);
+          this.currentAudio.volume = 1.0;
+          
+          this.currentAudio.onended = () => {
+            this.currentAudio = null;
+            resolve();
+          };
+          
+          this.currentAudio.onerror = (e) => {
+            console.warn('Audio playback failed, falling back to TTS:', e);
+            this.currentAudio = null;
+            // Fall back to TTS
+            this.speakWithTTS(text, rate).then(resolve).catch(reject);
+          };
+          
+          this.currentAudio.play().catch((error) => {
+            console.warn('Audio play failed, falling back to TTS:', error);
+            this.currentAudio = null;
+            // Fall back to TTS
+            this.speakWithTTS(text, rate).then(resolve).catch(reject);
+          });
+        } catch (error) {
+          console.warn('Audio creation failed, falling back to TTS:', error);
+          // Fall back to TTS
+          this.speakWithTTS(text, rate).then(resolve).catch(reject);
+        }
+      } else {
+        // No audio file available, use TTS
+        this.speakWithTTS(text, rate).then(resolve).catch(reject);
+      }
+    });
+  }
+
+  /**
+   * Internal method to speak using text-to-speech
+   */
+  private speakWithTTS(text: string, rate: number = 0.8): Promise<void> {
+    return new Promise((resolve, reject) => {
       const utterance = new SpeechSynthesisUtterance(text);
       
       // Set Chinese language
@@ -116,10 +189,15 @@ export class SpeechService {
   }
 
   /**
-   * Stop any ongoing speech
+   * Stop any ongoing speech or audio
    */
   public stop(): void {
     this.synth.cancel();
+    if (this.currentAudio) {
+      this.currentAudio.pause();
+      this.currentAudio.currentTime = 0;
+      this.currentAudio = null;
+    }
   }
 }
 

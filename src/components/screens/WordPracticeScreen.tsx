@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Word } from '../../types';
 import { TongueVisualization } from '../TongueVisualization';
 import { AccuracyMeter } from '../AccuracyMeter';
+import { AudioLevelVisualization } from '../AudioLevelVisualization';
 import { ListenButton } from '../ListenButton';
 import { ConfettiEffect } from '../ConfettiEffect';
 import { AudioService, AnalysisResult } from '../../lib/AudioService';
@@ -30,6 +31,7 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
   const [finalAccuracy, setFinalAccuracy] = useState(0);
   const [canContinue, setCanContinue] = useState(false);
   const [attempts, setAttempts] = useState(0);
+  const [audioIntensity, setAudioIntensity] = useState(0);
   const [detected, setDetected] = useState<DetectedVowel>({
     position: { x: 0.5, y: 0.5, f1: 0, f2: 0 },
     nearestVowel: null,
@@ -318,6 +320,23 @@ export const WordPracticeScreen: React.FC<WordPracticeScreenProps> = ({
                 Try Again
               </button>
             )}
+
+            {/* Debug button to force pass */}
+            <button 
+              className="btn btn--ghost" 
+              onClick={() => {
+                setCanContinue(true);
+                setOverallAccuracy(100);
+                setToneAccuracy(100);
+                setInitialAccuracy(100);
+                setFinalAccuracy(100);
+                playSuccessSound();
+              }}
+              style={{ fontSize: '0.75rem', padding: '0.5rem', opacity: 0.6 }}
+              title="Debug: Force pass"
+            >
+              🐛 Force Pass
+            </button>
 
             {canContinue && (
               <button 
