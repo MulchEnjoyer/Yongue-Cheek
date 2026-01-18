@@ -242,7 +242,7 @@ function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
+      <header className={`app-header ${progress.currentStep !== 'intro' ? 'app-header--compact' : ''}`}>
         <div className="app-header__logo">
           <img src="/logo.png" alt="Hide Your CLB Logo" className="app-header__logo-img" />
           <h1 className="app-header__title">Hide Your CLB</h1>
