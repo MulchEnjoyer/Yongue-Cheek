@@ -1,10 +1,10 @@
-# 你 Hide Your CLB
+# Hide Your CLB
 
 A visual Chinese pronunciation trainer that helps you nail tones, sounds, and phrases through real-time articulatory feedback.
 
 ## What is this?
 
-**Hide Your CLB** (Caucasian Language Barrier) is an interactive pronunciation coach that shows you exactly how to position your mouth, tongue, and vocal tract to produce authentic Mandarin sounds. Built for visual learners who want to go beyond "repeat after me."
+**Hide Your CLB** is an interactive pronunciation coach that shows you exactly how to position your mouth, tongue, and vocal tract to produce authentic Mandarin sounds. Built for visual learners who want to go beyond "repeat after me."
 
 ## Features
 
