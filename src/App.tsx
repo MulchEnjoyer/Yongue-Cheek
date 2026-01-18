@@ -244,17 +244,9 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="app-header__logo">
-          <span className="app-header__icon">你</span>
-          <span className="app-header__title">Hide Your CLB</span>
+          <img src="/logo.png" alt="Hide Your CLB Logo" className="app-header__logo-img" />
+          <h1 className="app-header__title">Hide Your CLB</h1>
         </div>
-        <nav className="app-header__nav">
-          <span className={`step-indicator ${progress.currentStep === 'intro' ? 'active' : ''}`}>Intro</span>
-          <span className={`step-indicator ${progress.currentStep === 'breakdown' ? 'active' : ''}`}>Breakdown</span>
-          <span className={`step-indicator ${progress.currentStep === 'sound-practice' ? 'active' : ''}`}>Sounds</span>
-          <span className={`step-indicator ${progress.currentStep === 'word-practice' ? 'active' : ''}`}>Words</span>
-          <span className={`step-indicator ${progress.currentStep === 'phrase-practice' ? 'active' : ''}`}>Phrase</span>
-          <span className={`step-indicator ${progress.currentStep === 'complete' ? 'active' : ''}`}>Complete</span>
-        </nav>
       </header>
       <main className="app-main">
         {renderCurrentStep()}
